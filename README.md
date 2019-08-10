@@ -1,4 +1,4 @@
-# Snakoban - 倉庫蛇
+# Poly-60
 
-A game made for LD53 http://ludumdare.com/compo/ludum-dare-35/?action=preview&uid=16828
-and LowRezJam https://itch.io/jam/lowrezjam2016/rate/62392
+A game polyrythmic toy/game made for LowRezJam 2019 https://itch.io/jam/lowrezjam-2019
+Made with Tone.js https://tonejs.github.io/
