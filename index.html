@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>LowRezJam19 - Fonserbc</title>
+		<style>
+		canvas {
+			image-rendering: pixelated;
+			/*zoom: 700%;*/
+			display: block;
+		    position: absolute;
+		    left: 0;
+		    top: 0;
+			image-rendering: pixelated;
+			image-rendering: crisp-edges;
+			image-rendering: -moz-crisp-edges;
+			image-rendering: -o-crisp-edges;
+			image-rendering: -webkit-optimize-contrast;
+			-ms-interpolation-mode: nearest-neighbor;
+			z-index: 0;
+		}
+
+		#bg-canvas {
+			z-index: -1;
+		}
+
+		div#holder {
+			padding-left: 0;
+		    padding-right: 0;
+		    margin-left: auto;
+		    margin-right: auto;
+		    display: block;		    
+			position: relative;
+			width: 576px;
+			height: 576px;
+		}
+
+		div#footer {
+			margin: 0 auto;
+		}
+		</style>
+	</head>
+	<body>
+		<div id="holder">
+			<canvas id="bg-canvas" width="576" height="576"></canvas>
+			<canvas id="canvas" width="576" height="576"></canvas>
+		</div>
+		<script type="text/javascript">
+			window.requestAnimFrame = (function(){
+			return  window.requestAnimationFrame       ||
+					window.webkitRequestAnimationFrame ||
+					window.mozRequestAnimationFrame    ||
+					window.oRequestAnimationFrame      ||
+					window.msRequestAnimationFrame     || //In case not supported, we define the function
+					function(/* function */ callback, /* DOMElement */ element){
+						window.setTimeout(callback, 1000 / 60);
+					};
+			})();
+
+			/*******************/
+			/** Asset Manager **/
+			/*******************/
+			function AssetManager() {
+				this.successCount = 0;
+				this.errorCount = 0;
+				this.cache = {};
+				this.downloadQueue = [];
+			}
+
+			AssetManager.prototype.queueDownload = function(path) {
+				this.downloadQueue.push(path);
+			}
+
+			AssetManager.prototype.downloadAll = function(downloadCallback) {
+				if (this.downloadQueue.length === 0) {
+					downloadCallback();
+				}
+
+				for (var i = 0; i < this.downloadQueue.length; i++) {
+					var path = this.downloadQueue[i];
+					var img = new Image();
+					var that = this;
+					img.addEventListener("load", function() {
+						//console.log(this.src + ' is loaded');
+						that.successCount += 1;
+						if (that.isDone()) {
+							downloadCallback();
+						}
+					}, false);
+					img.addEventListener("error", function() {
+						that.errorCount += 1;
+						if (that.isDone()) {
+							downloadCallback();
+						}
+					}, false);
+					img.src = path;
+					this.cache[path] = img;
+				}
+			}
+
+			AssetManager.prototype.getAsset = function(path) {
+				return this.cache[path];
+			}
+
+			AssetManager.prototype.isDone = function() {
+				return ((this.downloadQueue.length) == this.successCount + this.errorCount);
+			}
+		</script>
+
+		<script type="text/javascript" src="lib/Tone.js"> </script>
+
+		<script type="text/javascript">
+			var SCALE = 9;
+			var WIDTH = 64;
+			var HEIGHT = 64;
+			var CHANNELS = 7;
+			var MIN_BPM = 120;
+			var MAX_BPM = 360;
+			assetManager = new AssetManager();
+			assetManager.downloadQueue = ["bg.png", "power_off.png", "power_on.png"];
+
+			/*******************/
+			/***** Colors ******/
+			/*******************/
+			var c_beatHighlight = "rgba(255,255,255,0.3)";
+			var c_minusPlus = "#abaea3";
+
+			/*******************/
+			/*** Tonejs init ***/
+			/*******************/
+
+			var transport = Tone.Transport;
+			var bmp = 240;
+			transport.bpm.value = bmp;
+			transport.timeSignature = 60;
+			transport.loop = true;
+			transport.setLoopPoints(0,"1m");
+			transport.scheduleRepeat(transportCallback, "4n");
+
+			var synths = [];
+			for (let i = 0; i < CHANNELS; ++i) {
+				synths[i] = new Tone.Synth().toMaster();
+			}
+
+			function transportCallback (time) {
+				if (getCurrentTransportIt() % 2 == 0)
+					synths[0].triggerAttackRelease("C4", "4n", time, 0.7);
+			}
+
+			function getCurrentTransportIt() {
+				return parseInt(transport.position.split(':')[1]);
+			}
+
+			function decreaseBPM() {
+				setBPM(Math.max(bmp - 20, MIN_BPM));
+			}
+			function increaseBPM() {
+				setBPM(Math.min(bmp + 20, MAX_BPM));
+			}
+
+			function setBPM(newBPM) {
+				if (transport.state != "started" || true) {
+					transport.bpm.value = newBPM;
+				}
+				else {
+					transport.bpm.rampTo(newBPM, 0.3);
+				}
+				console.log("setting BPM at "+newBPM);
+				bmp = newBPM;
+			}
+
+			/*******************/
+			/***** Buttons *****/
+			/*******************/
+
+			var buttons = [];
+			var onOffButton = {
+				active: true,
+				isOn: false,
+				onSprite: "power_on.png",
+				offSprite: "power_off.png",
+
+				buttonRect: {
+					x: 1, y: 58,
+					width: 5, height: 5
+				},
+				onmousedown: function () {
+					this.isOn = !this.isOn;
+
+					if (this.isOn) {
+						transport.start();
+						turnMachineOn();
+					}
+					else {
+						transport.stop();
+						turnMachineOff();
+					}
+					// TODO Turn off/on music
+					console.log("onOffButton pressed, now is "+this.isOn);
+				},
+				draw: function(ctx) {
+					ctx.drawImage(assetManager.getAsset(this.isOn? this.onSprite : this.offSprite), this.buttonRect.x*SCALE, this.buttonRect.y*SCALE, this.buttonRect.width*SCALE, this.buttonRect.height*SCALE);
+				}
+			}
+			buttons.push(onOffButton); // 0
+
+			// -
+			var minusButton = {
+				pressed: false,
+				active: false,
+
+				buttonRect: {
+					x: 49, y: 60,
+					width: 3, height: 2
+				},
+				onmousedown: function () {
+					this.pressed = true;
+					decreaseBPM();
+				},
+				onmouseup: function() {
+					this.pressed = false;
+				},
+				draw: function(ctx) {
+					if(this.active) {
+						ctx.fillStyle = c_minusPlus;
+						let aux = this.pressed? 0 : 1;
+						ctx.fillRect(this.buttonRect.x*SCALE, (this.buttonRect.y + aux)*SCALE, this.buttonRect.width * SCALE, 1 * SCALE);
+					}
+				}
+			}
+			buttons.push(minusButton);
+			// +
+			var plusButton = {
+				pressed: false,
+				active: false,
+
+				buttonRect: {
+					x: 60, y: 59,
+					width: 3, height: 3
+				},
+				onmousedown: function () {
+					this.pressed = true;
+					increaseBPM();
+				},
+				onmouseup: function() {
+					this.pressed = false;
+				},
+				draw: function(ctx) {
+					if(this.active) {
+						ctx.fillStyle = c_minusPlus;
+						let aux = this.pressed? 0 : 1;
+						ctx.fillRect((this.buttonRect.x + 1)*SCALE, (this.buttonRect.y + aux)*SCALE, 1 * SCALE, 3 * SCALE);
+						ctx.fillRect(this.buttonRect.x*SCALE, (this.buttonRect.y + aux + 1)*SCALE, this.buttonRect.width * SCALE, 1 * SCALE);
+					}
+				}
+			}
+			buttons.push(plusButton);
+
+			function isMachineOn() {
+				return onOffButton.isOn;
+			}
+
+			function turnMachineOn() {
+				for (let i = 1; i < buttons.length; ++i) {
+					buttons[i].active = true;
+				}
+			}
+
+			function turnMachineOff() {
+				for (let i = 1; i < buttons.length; ++i) {
+					buttons[i].active = false;
+				}
+			}
+
+
+			var canvas = document.getElementById("canvas");
+			var ctx = canvas.getContext("2d");
+			var bgCanvas = document.getElementById("bg-canvas");
+			var bgCtx = bgCanvas.getContext("2d");
+			ctx.imageSmoothingEnabled = false;
+			ctx.webkitImageSmoothingEnabled  = false;
+			bgCtx.imageSmoothingEnabled = false;
+			bgCtx.webkitImageSmoothingEnabled  = false;
+			 
+			/*******************/
+			/****** Input ******/
+			/*******************/
+
+			function getMousePos(e) {
+				var rect = canvas.getBoundingClientRect();
+				return {
+				  x: Math.floor((e.clientX - rect.left)/SCALE),
+				  y: Math.floor((e.clientY - rect.top)/SCALE)
+				};
+			}
+
+			var pressedButton = null;
+			function onmousedown (e) {
+				var pos = getMousePos(e);
+				var button = getButtonUnder(pos);
+
+				if (button && button.active && button.onmousedown) {
+					button.onmousedown();
+					pressedButton = button;
+				}
+			}
+
+			function onmousemove (e) {
+				var pos = getMousePos(e);
+			
+				var button = getButtonUnder(pos);
+
+				if (button && button.active) {
+					document.body.style.cursor = "pointer";
+
+					if (button.onmousemove) {
+						button.onmousemove(pos);
+					}
+
+					if (pressedButton != null && pressedButton != button) {
+						if (pressedButton.onmouseup) {
+							pressedButton.onmouseup();
+							pressedButton = null;
+						}
+					}
+				}
+				else {
+					document.body.style.cursor = "default";
+
+					if (pressedButton != null) {
+						if (pressedButton.onmouseup) {
+							pressedButton.onmouseup();
+							pressedButton = null;
+						}
+					}
+				}
+			}
+
+			function onmouseup (e) {
+				var pos = getMousePos(e);
+
+				if (pressedButton && pressedButton.onmouseup) {
+					pressedButton.onmouseup();
+				}
+				pressedButton = null;
+			}
+
+			canvas.addEventListener("mousedown", onmousedown);
+			canvas.addEventListener("mousemove", onmousemove);
+			document.addEventListener("mouseup", onmouseup);
+			
+			//document.onkeydown = keydown;
+			//document.onkeyup = keyup;
+
+			/*******************/
+			/****** Logic ******/
+			/*******************/
+			function collides(rect, pos) {
+				return pos.x >= rect.x && pos.y >= rect.y && pos.x < rect.x + rect.width && pos.y < rect.y + rect.height;
+			}
+
+			function getButtonUnder(pos) {
+				for (let i = 0; i < buttons.length; ++i) {
+					if (collides(buttons[i].buttonRect, pos)) {
+						return buttons[i];
+					}
+				}
+
+				return null;
+			}
+
+			function update() {
+			}
+
+			function draw() {
+				ctx.fillStyle = "#FFF";
+				ctx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
+				
+				buttons.forEach(function (b) {
+					b.draw(ctx);
+				});
+
+				let transIt = getCurrentTransportIt();
+				if (transport.state != "stopped") {
+					ctx.fillStyle = c_beatHighlight;
+					ctx.fillRect((3 + transIt) * SCALE, 7 * SCALE, 1 * SCALE, 7*CHANNELS*SCALE);
+				}
+			}
+
+			function loop () {
+				update();
+				draw();
+
+				window.requestAnimFrame(loop);
+			}
+
+			ctx.fillStyle = "#000";
+			ctx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
+			bgCtx.fillStyle = "#000";
+			bgCtx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
+
+			assetManager.downloadAll(function() {
+				bgCtx.drawImage(assetManager.getAsset("bg.png"), 0, 0, WIDTH*SCALE, HEIGHT*SCALE);
+				
+				window.requestAnimFrame(loop);
+			});
+		</script>
+	</body>	
+</html>
