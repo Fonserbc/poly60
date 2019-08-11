@@ -4,6 +4,10 @@
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 		<title>LowRezJam19 - Fonserbc</title>
 		<style>
+		body {
+			background-color: #818F81;
+		}
+
 		canvas {
 			image-rendering: pixelated;
 			/*zoom: 700%;*/
@@ -77,12 +81,14 @@
 			/*******************/
 			/***** Colors ******/
 			/*******************/
-			var c_beatHighlight = "rgba(255,255,255,0.3)";
+			var c_beatHighlight = "rgba(0,0,0,100)";
 			var c_minusPlus = "#abaea3";
 			var c_muteButtonOn = "#E82317";
 			var c_muteButtonOnSide = "#FF5227";
 			var c_muteButtonOff = "#85140D";
 			var c_muteButtonOffSide = "#6E2310";
+			var c_stopButtonFront = "#535548";
+			var c_stopButtonBG = "#191a16";
 			var channelColours = [
 				{r: 255, g: 51, b: 18}, // red
 				{r: 189, g: 20, b: 217}, // purple
@@ -92,13 +98,18 @@
 				{r: 255, g: 161, b: 23}, // orange
 				{r: 227, g: 215, b: 16}, // yellow
 			];
+			var c_bmpLED = {r: 255, g: 10, b: 0};
 
 			function rgb(c) {
 				return "rgb("+c.r+","+c.g+","+c.b+")";
 			}
 
-			function darken(c) {
-				return {r: Math.floor(c.r * 0.5), g: Math.floor(c.g * 0.5), b: Math.floor(c.b * 0.5)};
+			function darken(c, f = 0.5) {
+				return {r: Math.floor(c.r * f), g: Math.floor(c.g * f), b: Math.floor(c.b * f)};
+			}
+
+			function colorLerp(c1, c2, f) {
+				return {r: Math.floor((c1.r + c2.r) * f), g: Math.floor((c1.g + c2.g) * f), b: Math.floor((c1.b + c2.b) * f)};
 			}
 
 			/*******************/
@@ -115,7 +126,7 @@
 
 			var channels = [];
 			var times = [12,10,6,5,4,3,2];
-			var channelNotes = ["C2", "G2", "D3", "A3", "E4", "B5", "F5" ];
+			var channelNotes = ["D5","A4","D4","B3","E3","G2","C2"];
 
 			for (let i = 0; i < CHANNELS; ++i) {
 				let channel = {
@@ -128,6 +139,7 @@
 				channels.push(channel);
 			}
 
+			var lastTransportTime = 0;
 			function transportCallback (time)
 			{
 				transportIt = getCurrentTransportIt();
@@ -135,10 +147,12 @@
 				for (let i = 0; i < CHANNELS; ++i) {
 					if (channels[i].isOn) {
 						if (transportIt % times[i] == channels[i].timeShift) {
-							channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], "4n", time, 0.7);
+							channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], Tone.Time("4n"), time, 0.7);
 						}
 					}
 				}
+
+				lastTransportTime = 0;
 			}
 
 			function getCurrentTransportIt() {
@@ -159,7 +173,7 @@
 				else {
 					transport.bpm.rampTo(newBPM, 0.3);
 				}
-				console.log("setting BPM at "+newBPM);
+				//console.log("setting BPM at "+newBPM);
 				bmp = newBPM;
 			}
 
@@ -168,6 +182,7 @@
 			/*******************/
 
 			var buttons = [];
+			// OnOff
 			var onOffButton = {
 				active: true,
 				isOn: false,
@@ -187,15 +202,73 @@
 					else {
 						turnMachineOff();
 					}
-					// TODO Turn off/on music
-					console.log("onOffButton pressed, now is "+this.isOn);
+					console.log("Turned machine "+(this.isOn? "ON" : "OFF"));
 				},
 				draw: function(ctx) {
 					ctx.drawImageScaled(assetManager.getAsset(this.isOn? this.onSprite : this.offSprite), this.buttonRect.x, this.buttonRect.y, this.buttonRect.width, this.buttonRect.height);
 				}
-			}
+			};
 			buttons.push(onOffButton); // 0
 
+
+			// stop button
+			var stopButton = {
+				active: false,
+				pressed: false,
+				justPressed: false,
+
+				buttonRect: {
+					x: 54, y: 58,
+					width: 4, height: 5
+				},
+				onmousedown: function () {
+					if (!this.pressed) {
+						this.pressed = true;
+						transport.stop();
+						this.justPressed = true;
+					}
+				},
+				onmouseup: function () {
+					if (this.pressed && !this.justPressed) {
+						this.pressed = false;
+						transport.start();
+					}
+					this.justPressed = false;
+				},
+				draw: function(ctx) {
+					if (this.active) {
+						if (this.pressed) {
+							ctx.fillStyle = c_stopButtonFront;	
+							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y, 4, 4);
+							
+							let t = Math.floor(Time.time * 2) % 2;
+							if (t == 0) ctx.fillStyle = rgb(c_bmpLED);
+							else ctx.fillStyle = rgb(darken(c_bmpLED, 0.2));
+
+							ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + 1, 2, 2);
+						}
+						else {
+							ctx.fillStyle = c_stopButtonBG;
+							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y, 4, 1);
+
+							ctx.fillStyle = c_stopButtonFront;	
+							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 1, 4, 4);
+
+							ctx.fillStyle = rgb(darken(c_bmpLED, 0.2));
+							ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + 2, 2, 2);
+
+							let t = transportIt % 4;
+							let aux = {x: 0, y:0};
+
+							if (t == 1 || t == 2) aux.x = 1;
+							if (t == 2 || t == 3) aux.y = 1;
+							ctx.fillStyle = rgb(c_bmpLED);
+							ctx.fillRectScaled(this.buttonRect.x + 1 + aux.x, this.buttonRect.y + 2 + aux.y, 1, 1);
+						}
+					}
+				}
+			};
+			buttons.push(stopButton);
 			// -
 			var minusButton = {
 				pressed: false,
@@ -322,6 +395,7 @@
 				for (let i = 1; i < buttons.length; ++i) {
 					buttons[i].active = true;
 				}
+				stopButton.pressed = false;
 			}
 
 			function turnMachineOff() {
@@ -468,8 +542,23 @@
 			}
 			
 			var transportIt = 0;
-			function update() {
+			var lastTick = 0;
+			var maxTick = 1/20;
+			var Time = {
+				time : 0,
+				deltaTime: 0
+			};
+			function update(tick)
+			{
+				var deltaTime = Math.min((tick - lastTick)/1000, maxTick);
+				lastTick = tick;
+
+				Time.deltaTime = deltaTime;
+				Time.time += deltaTime;
+
 				transportIt = getCurrentTransportIt();
+
+				lastTransportTime += deltaTime;
 			}
 
 			function draw() {
@@ -497,8 +586,8 @@
 				}
 			}
 
-			function loop () {
-				update();
+			function loop (tick) {
+				update(tick);
 				draw();
 
 				window.requestAnimFrame(loop);
