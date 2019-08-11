@@ -112,6 +112,10 @@
 				return {r: Math.floor((c1.r + c2.r) * f), g: Math.floor((c1.g + c2.g) * f), b: Math.floor((c1.b + c2.b) * f)};
 			}
 
+			function rgba(c, a = 0.5) {
+				return "rgba("+c.r+","+c.g+","+c.b+","+a+")";
+			}
+
 			/*******************/
 			/*** Tonejs init ***/
 			/*******************/
@@ -134,7 +138,10 @@
 					synth: new Tone.Synth().toMaster(),
 					colourIt: i,
 					timeShift: 0,
-					isOn: false
+					isOn: false,
+					get colour () {
+						return channelColours[this.colourIt];
+					}
 				};
 				channels.push(channel);
 			}
@@ -326,7 +333,6 @@
 				let muteButton = {
 					pressed: false,
 					active: false,
-					isOn: false,
 					id: i,
 
 					buttonRect: {
@@ -338,15 +344,16 @@
 					},
 					onmouseup: function() {
 						this.pressed = false;
-						this.isOn = muteChannelPressed(i);
+						muteChannelPressed(i);
 					},
 					draw: function(ctx) {
 						if(this.active) {
+							let isOn = channels[this.id].isOn;
 							let aux = this.pressed? 1 : 0;
-							ctx.fillStyle = this.isOn? c_muteButtonOn : c_muteButtonOff;
+							ctx.fillStyle = isOn? c_muteButtonOn : c_muteButtonOff;
 							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 2);
 							if (!this.pressed) {
-								ctx.fillStyle = this.isOn? c_muteButtonOnSide : c_muteButtonOffSide;
+								ctx.fillStyle = isOn? c_muteButtonOnSide : c_muteButtonOffSide;
 								ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 2, 1, 1);
 							}
 						}
@@ -358,7 +365,6 @@
 					pressed: false,
 					active: false,
 					id: i,
-					colour: channelColours[i],
 
 					buttonRect: {
 						x: 1, y: 7 + i * CHANNEL_HEIGHT,
@@ -369,21 +375,73 @@
 					},
 					onmouseup: function() {
 						this.pressed = false;
-						this.colour = changeChannelPressed(i);
+						changeChannelPressed(i);
 					},
 					draw: function(ctx) {
 						if(this.active) {
 							let aux = this.pressed? 1 : 0;
-							ctx.fillStyle = rgb(this.colour);
+							let colour = channels[this.id].colour;
+							ctx.fillStyle = rgb(colour);
 							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 1);
 							if (!this.pressed) {
-								ctx.fillStyle = rgb(darken(this.colour));
+								ctx.fillStyle = rgb(darken(colour));
 								ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 1, 1, 1);
 							}
 						}
 					}
 				}
 				buttons.push(switchButton);
+
+				let touchInterface = {
+					active: false,
+					mouseIsOver: false,
+					id: i,
+					buttonRect: {
+						x: 3, y: 7 + i * CHANNEL_HEIGHT,
+						width: 60, height: CHANNEL_HEIGHT
+					},
+					onmousedown: function (pos) {
+						let p = pos.x - this.buttonRect.x;
+						p = p % times[this.id];
+
+						if (channels[this.id].isOn) {
+							if (channels[this.id].timeShift == p) {
+								channels[this.id].isOn = false;
+							}
+							else {
+								channels[this.id].timeShift = p;
+							}
+						}
+						else {
+							channels[this.id].isOn = true;
+							channels[this.id].timeShift = p;
+						}
+					},
+					onmouseenter: function () {
+						this.mouseIsOver = true;
+					},
+					onmouseexit: function () {
+						this.mouseIsOver = false;
+					},
+					draw: function(ctx) {
+						if (this.mouseIsOver) {
+							let p = lastMousePosition.x - this.buttonRect.x;
+							p = p % times[this.id];
+
+							if (p == channels[this.id].timeShift && channels[this.id].isOn) {
+								ctx.fillStyle = rgb(channels[this.id].colour);
+							}
+							else {
+								ctx.fillStyle = rgba(channels[this.id].colour, 0.35);
+							}
+
+							for (let j = p; j < TIME_STEPS; j += times[this.id]) {
+								ctx.fillRectScaled(3 + j, 7 + this.id * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+							}
+						}
+					}
+				}
+				buttons.push(touchInterface);
 			}
 
 			function isMachineOn() {
@@ -433,8 +491,6 @@
 					it = 0;
 				}
 				channels[channelIt].colourIt = it;
-
-				return channelColours[it];
 			}
 
 			var canvas = document.getElementById("canvas");
@@ -472,11 +528,13 @@
 				var button = getButtonUnder(pos);
 
 				if (button && button.active && button.onmousedown) {
-					button.onmousedown();
+					button.onmousedown(pos);
 					pressedButton = button;
 				}
 			}
 
+			var overButton = null;
+			var lastMousePosition = {x:0, y:0};
 			function onmousemove (e) {
 				var pos = getMousePos(e);
 			
@@ -485,27 +543,42 @@
 				if (button && button.active) {
 					document.body.style.cursor = "pointer";
 
-					if (button.onmousemove) {
-						button.onmousemove(pos);
+					if (overButton != button) {
+						if (overButton) {
+							if (overButton.onmouseexit)
+								overButton.onmouseexit();
+							if (pressedButton) {
+								if (pressedButton.onmouseup)
+									pressedButton.onmouseup();
+								pressedButton = null;
+							}
+						}
+
+						if (button.onmouseenter) {
+							button.onmouseenter();
+						}
 					}
 
-					if (pressedButton != null && pressedButton != button) {
-						if (pressedButton.onmouseup) {
-							pressedButton.onmouseup();
-							pressedButton = null;
-						}
+					if (button.onmousemove) {
+						button.onmousemove(pos);
 					}
 				}
 				else {
 					document.body.style.cursor = "default";
 
-					if (pressedButton != null) {
-						if (pressedButton.onmouseup) {
-							pressedButton.onmouseup();
-							pressedButton = null;
-						}
+					if (overButton && overButton.onmouseexit) {
+						overButton.onmouseexit();
 					}
+
+					if (pressedButton && pressedButton.onmouseup) {
+						pressedButton.onmouseup();
+					}
+					pressedButton = null;
 				}
+
+				overButton = button;
+
+				lastMousePosition = pos;
 			}
 
 			function onmouseup (e) {
@@ -565,10 +638,6 @@
 				ctx.fillStyle = "#FFF";
 				ctx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
 				
-				buttons.forEach(function (b) {
-					b.draw(ctx);
-				});
-
 				if (transport.state != "stopped") {
 					ctx.fillStyle = c_beatHighlight;
 					ctx.fillRectScaled((3 + transportIt), 7, 1, 7 * CHANNELS);
@@ -589,6 +658,10 @@
 						}
 					}
 				}
+
+				buttons.forEach(function (b) {
+					b.draw(ctx);
+				});
 			}
 
 			function loop (tick) {
