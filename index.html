@@ -56,66 +56,21 @@
 						window.setTimeout(callback, 1000 / 60);
 					};
 			})();
-
-			/*******************/
-			/** Asset Manager **/
-			/*******************/
-			function AssetManager() {
-				this.successCount = 0;
-				this.errorCount = 0;
-				this.cache = {};
-				this.downloadQueue = [];
-			}
-
-			AssetManager.prototype.queueDownload = function(path) {
-				this.downloadQueue.push(path);
-			}
-
-			AssetManager.prototype.downloadAll = function(downloadCallback) {
-				if (this.downloadQueue.length === 0) {
-					downloadCallback();
-				}
-
-				for (var i = 0; i < this.downloadQueue.length; i++) {
-					var path = this.downloadQueue[i];
-					var img = new Image();
-					var that = this;
-					img.addEventListener("load", function() {
-						//console.log(this.src + ' is loaded');
-						that.successCount += 1;
-						if (that.isDone()) {
-							downloadCallback();
-						}
-					}, false);
-					img.addEventListener("error", function() {
-						that.errorCount += 1;
-						if (that.isDone()) {
-							downloadCallback();
-						}
-					}, false);
-					img.src = path;
-					this.cache[path] = img;
-				}
-			}
-
-			AssetManager.prototype.getAsset = function(path) {
-				return this.cache[path];
-			}
-
-			AssetManager.prototype.isDone = function() {
-				return ((this.downloadQueue.length) == this.successCount + this.errorCount);
-			}
 		</script>
 
-		<script type="text/javascript" src="lib/Tone.js"> </script>
+		<script src="lib/Tone.js"> </script>
+		<script src="AssetManager.js"> </script>
 
 		<script type="text/javascript">
 			var SCALE = 9;
 			var WIDTH = 64;
 			var HEIGHT = 64;
+			var TIME_STEPS = 60;
 			var CHANNELS = 7;
+			var CHANNEL_HEIGHT = 7;
 			var MIN_BPM = 120;
 			var MAX_BPM = 360;
+			var D_BPM = 240;
 			assetManager = new AssetManager();
 			assetManager.downloadQueue = ["bg.png", "power_off.png", "power_on.png"];
 
@@ -124,27 +79,66 @@
 			/*******************/
 			var c_beatHighlight = "rgba(255,255,255,0.3)";
 			var c_minusPlus = "#abaea3";
+			var c_muteButtonOn = "#E82317";
+			var c_muteButtonOnSide = "#FF5227";
+			var c_muteButtonOff = "#85140D";
+			var c_muteButtonOffSide = "#6E2310";
+			var channelColours = [
+				{r: 255, g: 51, b: 18}, // red
+				{r: 189, g: 20, b: 217}, // purple
+				{r: 37, g: 53, b: 240}, // marine blue
+				{r: 22, g: 216, b: 217}, // cyan
+				{r: 30, g: 250, b: 34}, // green
+				{r: 255, g: 161, b: 23}, // orange
+				{r: 227, g: 215, b: 16}, // yellow
+			];
+
+			function rgb(c) {
+				return "rgb("+c.r+","+c.g+","+c.b+")";
+			}
+
+			function darken(c) {
+				return {r: Math.floor(c.r * 0.5), g: Math.floor(c.g * 0.5), b: Math.floor(c.b * 0.5)};
+			}
 
 			/*******************/
 			/*** Tonejs init ***/
 			/*******************/
 
 			var transport = Tone.Transport;
-			var bmp = 240;
+			var bmp = D_BPM;
 			transport.bpm.value = bmp;
-			transport.timeSignature = 60;
+			transport.timeSignature = TIME_STEPS;
 			transport.loop = true;
 			transport.setLoopPoints(0,"1m");
 			transport.scheduleRepeat(transportCallback, "4n");
 
-			var synths = [];
+			var channels = [];
+			var times = [12,10,6,5,4,3,2];
+			var channelNotes = ["C2", "G2", "D3", "A3", "E4", "B5", "F5" ];
+
 			for (let i = 0; i < CHANNELS; ++i) {
-				synths[i] = new Tone.Synth().toMaster();
+				let channel = {
+					id: i,
+					synth: new Tone.Synth().toMaster(),
+					colourIt: i,
+					timeShift: 0,
+					isOn: false
+				};
+				channels.push(channel);
 			}
 
-			function transportCallback (time) {
-				if (getCurrentTransportIt() % 2 == 0)
-					synths[0].triggerAttackRelease("C4", "4n", time, 0.7);
+			function transportCallback (time)
+			{
+				transportIt = getCurrentTransportIt();
+
+				for (let i = 0; i < CHANNELS; ++i) {
+					if (channels[i].isOn) {
+						if (transportIt % times[i] == channels[i].timeShift) {
+							channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], "4n", time, 0.7);
+						}
+					}
+				}
 			}
 
 			function getCurrentTransportIt() {
@@ -188,18 +182,16 @@
 					this.isOn = !this.isOn;
 
 					if (this.isOn) {
-						transport.start();
 						turnMachineOn();
 					}
 					else {
-						transport.stop();
 						turnMachineOff();
 					}
 					// TODO Turn off/on music
 					console.log("onOffButton pressed, now is "+this.isOn);
 				},
 				draw: function(ctx) {
-					ctx.drawImage(assetManager.getAsset(this.isOn? this.onSprite : this.offSprite), this.buttonRect.x*SCALE, this.buttonRect.y*SCALE, this.buttonRect.width*SCALE, this.buttonRect.height*SCALE);
+					ctx.drawImageScaled(assetManager.getAsset(this.isOn? this.onSprite : this.offSprite), this.buttonRect.x, this.buttonRect.y, this.buttonRect.width, this.buttonRect.height);
 				}
 			}
 			buttons.push(onOffButton); // 0
@@ -224,7 +216,7 @@
 					if(this.active) {
 						ctx.fillStyle = c_minusPlus;
 						let aux = this.pressed? 0 : 1;
-						ctx.fillRect(this.buttonRect.x*SCALE, (this.buttonRect.y + aux)*SCALE, this.buttonRect.width * SCALE, 1 * SCALE);
+						ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, this.buttonRect.width, 1);
 					}
 				}
 			}
@@ -249,29 +241,127 @@
 					if(this.active) {
 						ctx.fillStyle = c_minusPlus;
 						let aux = this.pressed? 0 : 1;
-						ctx.fillRect((this.buttonRect.x + 1)*SCALE, (this.buttonRect.y + aux)*SCALE, 1 * SCALE, 3 * SCALE);
-						ctx.fillRect(this.buttonRect.x*SCALE, (this.buttonRect.y + aux + 1)*SCALE, this.buttonRect.width * SCALE, 1 * SCALE);
+						ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + aux, 1, 3);
+						ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux + 1, this.buttonRect.width, 1);
 					}
 				}
 			}
 			buttons.push(plusButton);
+
+			// Channel buttons
+			for (let i = 0; i < CHANNELS; ++i) {
+				let muteButton = {
+					pressed: false,
+					active: false,
+					isOn: false,
+					id: i,
+
+					buttonRect: {
+						x: 1, y: 10 + i * CHANNEL_HEIGHT,
+						width: 1, height: 3
+					},
+					onmousedown: function () {
+						this.pressed = true;
+					},
+					onmouseup: function() {
+						this.pressed = false;
+						this.isOn = muteChannelPressed(i);
+					},
+					draw: function(ctx) {
+						if(this.active) {
+							let aux = this.pressed? 1 : 0;
+							ctx.fillStyle = this.isOn? c_muteButtonOn : c_muteButtonOff;
+							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 2);
+							if (!this.pressed) {
+								ctx.fillStyle = this.isOn? c_muteButtonOnSide : c_muteButtonOffSide;
+								ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 2, 1, 1);
+							}
+						}
+					}
+				}
+				buttons.push(muteButton);
+
+				let switchButton = {
+					pressed: false,
+					active: false,
+					id: i,
+					colour: channelColours[i],
+
+					buttonRect: {
+						x: 1, y: 7 + i * CHANNEL_HEIGHT,
+						width: 1, height: 2
+					},
+					onmousedown: function () {
+						this.pressed = true;
+					},
+					onmouseup: function() {
+						this.pressed = false;
+						this.colour = changeChannelPressed(i);
+					},
+					draw: function(ctx) {
+						if(this.active) {
+							let aux = this.pressed? 1 : 0;
+							ctx.fillStyle = rgb(this.colour);
+							ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 1);
+							if (!this.pressed) {
+								ctx.fillStyle = rgb(darken(this.colour));
+								ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 1, 1, 1);
+							}
+						}
+					}
+				}
+				buttons.push(switchButton);
+			}
 
 			function isMachineOn() {
 				return onOffButton.isOn;
 			}
 
 			function turnMachineOn() {
+				transport.start();
 				for (let i = 1; i < buttons.length; ++i) {
 					buttons[i].active = true;
 				}
 			}
 
 			function turnMachineOff() {
+				transport.stop();
 				for (let i = 1; i < buttons.length; ++i) {
 					buttons[i].active = false;
 				}
+
+				setBPM(D_BPM);
 			}
 
+			function muteChannelPressed(channelIt) {
+				if (!channels[channelIt].isOn) {
+					channels[channelIt].isOn = true;
+				}
+				else {
+					let shift = channels[channelIt].timeShift;
+
+					shift ++;
+					if (shift >= times[channelIt]) {
+						channels[channelIt].timeShift = 0;
+						channels[channelIt].isOn = false;
+					}
+					else {
+						channels[channelIt].timeShift = shift;
+					}
+				}
+
+				return channels[channelIt].isOn;
+			}
+
+			function changeChannelPressed(channelIt) {
+				let it = channels[channelIt].colourIt + 1;
+				if (it >= CHANNELS) {
+					it = 0;
+				}
+				channels[channelIt].colourIt = it;
+
+				return channelColours[it];
+			}
 
 			var canvas = document.getElementById("canvas");
 			var ctx = canvas.getContext("2d");
@@ -281,6 +371,14 @@
 			ctx.webkitImageSmoothingEnabled  = false;
 			bgCtx.imageSmoothingEnabled = false;
 			bgCtx.webkitImageSmoothingEnabled  = false;
+
+			ctx.fillRectScaled = function (x, y, w, h) {
+				ctx.fillRect(x * SCALE, y * SCALE, w * SCALE, h * SCALE);
+			}
+
+			ctx.drawImageScaled = function (image, x, y, w, h) {
+				ctx.drawImage(image, x * SCALE, y * SCALE, w * SCALE, h * SCALE);
+			}
 			 
 			/*******************/
 			/****** Input ******/
@@ -368,8 +466,10 @@
 
 				return null;
 			}
-
+			
+			var transportIt = 0;
 			function update() {
+				transportIt = getCurrentTransportIt();
 			}
 
 			function draw() {
@@ -380,10 +480,20 @@
 					b.draw(ctx);
 				});
 
-				let transIt = getCurrentTransportIt();
 				if (transport.state != "stopped") {
 					ctx.fillStyle = c_beatHighlight;
-					ctx.fillRect((3 + transIt) * SCALE, 7 * SCALE, 1 * SCALE, 7*CHANNELS*SCALE);
+					ctx.fillRectScaled((3 + transportIt), 7, 1, 7 * CHANNELS);
+				}
+
+				if (isMachineOn()) {
+					for (let i = 0; i < CHANNELS; ++i) {
+						if (channels[i].isOn) {
+							for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i]) {
+								ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
+								ctx.fillRectScaled(3 + j, 7 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+							}
+						}
+					}
 				}
 			}
 
