@@ -81,7 +81,7 @@
 			/*******************/
 			/***** Colors ******/
 			/*******************/
-			var c_beatHighlight = "rgba(0,0,0,100)";
+			var c_beatHighlight = "rgba(0,0,0,0.35)";
 			var c_minusPlus = "#abaea3";
 			var c_muteButtonOn = "#E82317";
 			var c_muteButtonOnSide = "#FF5227";
@@ -578,7 +578,12 @@
 					for (let i = 0; i < CHANNELS; ++i) {
 						if (channels[i].isOn) {
 							for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i]) {
-								ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
+								if (transportIt == j) {
+									ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
+								}
+								else {
+									ctx.fillStyle = rgb(darken(channelColours[channels[i].colourIt], 0.7));
+								}
 								ctx.fillRectScaled(3 + j, 7 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
 							}
 						}
