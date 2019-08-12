@@ -30,20 +30,23 @@ function rgba(c, a = 0.5) {
 	return "rgba("+c.r+","+c.g+","+c.b+","+a+")";
 }
 
+var c_bmpLEDWrong = {r: 255, g: 10, b: 0};
+var c_bmpLED = {r: 255, g: 140, b: 0};
+var c_level = {r: 81, g: 181, b:255};
+var c_level_dark = "#1A77C2";
 var c_beatHighlight = "rgba(0,0,0,0.35)";
-var c_bmpLED = {r: 255, g: 10, b: 0};
 var c_minusPlus = "#abaea3";
 var c_minusPlusSide = "#75776f";
-var c_levelButton = "#ffffff";
-var c_levelButtonSide = "#abaea3";
+var c_levelButton = rgb(c_level);
+var c_levelButtonSide = rgb(darken(c_level, 0.7));
 var c_muteButtonOn = rgb(c_bmpLED);
 var c_muteButtonOnSide = rgb(darken(c_bmpLED, 0.7));
 var c_muteButtonOff = rgb(darken(c_bmpLED, 0.35));
 var c_muteButtonOffSide = rgb(darken(c_bmpLED, 0.2));
 var c_stopButtonFront = "#535548";
 var c_stopButtonBG = "#191a16";
-var c_result = "#FF9C4D";
-var c_result2 = "#FFFFFF";
+var c_result = rgb(c_bmpLED);
+var c_result_wrong = rgb(darken(c_bmpLED, 0.7));
 var c_challengeButtonFront = "#66EBFF";
 var c_challengeButtonBG = "#249FB3";
 var channelColours = [
@@ -77,6 +80,7 @@ for (let i = 0; i < TIME_STEPS; ++i) {
 	result.push(0);
 	level.push(0);
 }
+
 
 for (let i = 0; i < CHANNELS; ++i) {
 	let channel = {
@@ -158,10 +162,21 @@ var onOffButton = {
 		else {
 			turnMachineOff();
 		}
-		console.log("Turned machine "+(this.isOn? "ON" : "OFF"));
+		//console.log("Turned machine "+(this.isOn? "ON" : "OFF"));
 	},
 	draw: function(ctx) {
-		ctx.drawImageScaled(assetManager.getAsset(this.isOn? this.onSprite : this.offSprite), this.buttonRect.x, this.buttonRect.y, this.buttonRect.width, this.buttonRect.height);
+		if (this.isOn) {
+			ctx.fillStyle = c_muteButtonOn;
+			ctx.fillRectScaled(this.buttonRect.x + this.buttonRect.width - 1, this.buttonRect.y, 1, this.buttonRect.height);
+			ctx.fillStyle = c_muteButtonOnSide;
+			ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y, this.buttonRect.width - 1, this.buttonRect.height - 1);
+		}
+		else {
+			ctx.fillStyle = c_muteButtonOnSide;
+			ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y, 1, this.buttonRect.height);
+			ctx.fillStyle = c_muteButtonOff;
+			ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y, this.buttonRect.width - 1, this.buttonRect.height - 1);
+		}
 	}
 };
 buttons.push(onOffButton); // 0
@@ -288,11 +303,11 @@ var levelButton = {
 
 	buttonRect: {
 		x: 1, y: 0,
-		width: 1, height: 6
+		width: 1, height: 7
 	},
 	onmousedown: function () {
 		this.pressed = true;
-		genearteNewLevel();
+		generateNewLevel();
 	},
 	onmouseup: function() {
 		this.pressed = false;
@@ -302,11 +317,11 @@ var levelButton = {
 			ctx.fillStyle = c_levelButton;
 			let aux = this.pressed? 1 : 0;
 
-			ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 5);
+			ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, this.buttonRect.height - 1);
 
 			if (!this.pressed) {
 				ctx.fillStyle = c_levelButtonSide;
-				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 5, 1, 1);
+				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + this.buttonRect.height - 1, 1, 1);
 			}
 		}
 	}
@@ -323,7 +338,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 		vId: visibleButtonId++,
 
 		buttonRect: {
-			x: 1, y: 10 + i * CHANNEL_HEIGHT,
+			x: 1, y: 11 + i * CHANNEL_HEIGHT,
 			width: 1, height: 3
 		},
 		onmousedown: function () {
@@ -355,7 +370,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 		vId: visibleButtonId++,
 
 		buttonRect: {
-			x: 1, y: 7 + i * CHANNEL_HEIGHT,
+			x: 1, y: 8 + i * CHANNEL_HEIGHT,
 			width: 1, height: 2
 		},
 		onmousedown: function () {
@@ -387,7 +402,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 		vId: visibleButtonId++,
 
 		buttonRect: {
-			x: 3, y: 7 + i * CHANNEL_HEIGHT,
+			x: 3, y: 8 + i * CHANNEL_HEIGHT,
 			width: 60, height: CHANNEL_HEIGHT
 		},
 		onmousedown: function (pos) {
@@ -419,14 +434,19 @@ for (let i = 0; i < CHANNELS; ++i) {
 				p = p % times[this.id];
 
 				if (p == channels[this.id].timeShift && channels[this.id].isOn) {
-					ctx.fillStyle = rgb(channels[this.id].colour);
+					ctx.fillStyle = rgba(channels[this.id].colour, 0.5);
 				}
 				else {
 					ctx.fillStyle = rgba(channels[this.id].colour, 0.35);
 				}
 
 				for (let j = p; j < TIME_STEPS; j += times[this.id]) {
-					ctx.fillRectScaled(3 + j, 7 + this.id * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+					ctx.fillRectScaled(this.buttonRect.x + j, this.buttonRect.y, 1, CHANNEL_HEIGHT);
+				}
+				
+				ctx.fillStyle = rgba(channels[this.id].colour, 0.35);
+				for (let j = p; j < TIME_STEPS; j += times[this.id]) {
+					ctx.fillRectScaled(this.buttonRect.x + j, CHANNEL_HEIGHT, 1, 1);//CHANNEL_HEIGHT - 1);
 				}
 			}
 		}
@@ -447,7 +467,6 @@ for (let i = 0; i < visibleButtonId; ++i) {
 	turnOnScale.push(tOn);
 	turnOffScale.push(tOff);
 }
-console.log(turnOnScale, turnOffScale);
 //
 
 function isMachineOn() {
@@ -522,8 +541,40 @@ function changeChannelPressed(channelIt) {
 	channels[channelIt].colourIt = it;
 }
 
-function genearteNewLevel() {
-	
+var levelExpectedChannels = 0;
+function generateNewLevel()
+{	
+	levelExpectedChannels = Math.floor(Math.random() * (CHANNELS - 1)) + 2;
+
+	let chosenChannels = [];
+	for (let i = 0; i < CHANNELS; ++i) {
+		chosenChannels.push(i);
+	}
+
+	while (chosenChannels.length > levelExpectedChannels) {
+		let r = Math.floor(Math.random() * chosenChannels.length);
+		chosenChannels.splice(r, 1);
+	}
+
+	console.log("Choosen channels: ", chosenChannels);
+
+	let chosenShifts = [];
+	for (let i = 0; i < chosenChannels.length; ++i) {
+		chosenShifts.push(Math.floor(Math.random() * times[chosenChannels[i]]));
+	}
+	console.log("Choosen shifts: ", chosenShifts);
+
+
+	for (let i = 0; i < TIME_STEPS; ++i) {
+		level[i] = 0;
+
+		for (let j = 0; j < chosenChannels.length; ++j) {
+			if ((i % times[chosenChannels[j]]) == chosenShifts[j]) level[i]++;
+		}
+
+		//if (level[i] == 1) level[i] = 0;
+	}
+	console.log("CHosen level: ", level);
 }
 
 var canvas = document.getElementById("canvas");
@@ -708,12 +759,14 @@ function draw() {
 				
 	if (transport.state != "stopped") {
 		ctx.fillStyle = c_beatHighlight;
-		ctx.fillRectScaled((3 + transportIt), 1, 1, 6 + 7 * CHANNELS);
+		ctx.fillRectScaled((3 + transportIt), 0, 1, 1 + CHANNEL_HEIGHT * (CHANNELS + 1));
 	}
 
 	if (isMachineOn()) {
+		var usedChannels = 0;
 		for (let i = 0; i < CHANNELS; ++i) {
 			if (channels[i].isOn) {
+				usedChannels++;
 				for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i]) {
 					if (transportIt == j && isMusicPlaying()) {
 						ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
@@ -721,16 +774,47 @@ function draw() {
 					else {
 						ctx.fillStyle = rgb(darken(channelColours[channels[i].colourIt], 0.7));
 					}
-					ctx.fillRectScaled(3 + j, 7 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+					ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
 				}
 			}
 		}
 
 		for (let i = 0; i < TIME_STEPS; ++i) {
-			if (result[i] > 1) {
-				ctx.fillStyle = c_result2;
+			let correct = result[i] == level[i]; // || (level[i] == 0 && result[i] <= 1) 
+			
+			ctx.fillStyle = !correct? rgb(c_level) : c_level_dark;
+			let h = 7 - level[i];
+			if (h > 0) {
+				ctx.fillRectScaled(3 + i, level[i], 1, h);
+			}
 
-				ctx.fillRectScaled(3 + i, 1, 1, result[i] - 1)
+			if (result[i] > 0) {
+				let top = Math.min(level[i], result[i]);
+
+				if (top > 0) {
+					ctx.fillStyle = correct? c_result : c_result_wrong;
+
+					ctx.fillRectScaled(3 + i, 0, 1, top);
+				}
+
+				if (result[i] > level[i]) {
+					let overflow = result[i] - level[i];
+
+					ctx.fillStyle = rgb(c_bmpLEDWrong);//, 0.5); // Overlapping
+					ctx.fillRectScaled(3 + i, top, 1, overflow);
+				}
+			}
+		}
+
+		var channelOverUnder = levelExpectedChannels - usedChannels;
+
+		for (let i = 0; i < CHANNELS; ++i) {
+			let y = Math.floor(i / 4);
+			let x = i % 4;
+
+			if (Math.abs(channelOverUnder) > i) {
+				ctx.fillStyle = channelOverUnder < 0? rgb(c_bmpLEDWrong) : rgb(c_bmpLED);
+				ctx.fillRectScaled(39 + x * 2, 59 + y * 2, 1, 1);
 			}
 		}
 	}
@@ -754,6 +838,8 @@ var bgImage = null;
 assetManager.downloadAll(function() {
 	bgImage = assetManager.getAsset("bg.png");
 	ctx.drawImageScaled(bgImage, 0, 0, WIDTH, HEIGHT);
+
+	generateNewLevel();
 				
 	window.requestAnimFrame(loop);
 });
