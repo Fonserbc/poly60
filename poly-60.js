@@ -83,15 +83,53 @@ for (let i = 0; i < TIME_STEPS; ++i) {
 	level.push(0);
 }
 
+var instruments = [];
+instruments.push({synth: new Tone.PolySynth(7, Tone.Synth).toMaster(), volume: 0.9});
+instruments.push({synth: new Tone.PolySynth(7, function () {
+	return new Tone.Synth({
+			"oscillator" : {
+				"type" : "amtriangle",
+				"harmonicity" : 0.5,
+				"modulationType" : "sine"
+			},
+			"envelope" : {
+				"attackCurve" : "exponential",
+				"attack" : 0.05,
+				"decay" : 0.2,
+				"sustain" : 0.2,
+				"release" : 1.5,
+			},
+			"portamento" : 0.05
+			});
+}).toMaster(), volume: 1});
+instruments.push({synth: new Tone.PolySynth(7, function () {
+	return new Tone.Synth({
+			"oscillator" : {
+				"type" : "fmtriangle",
+				"harmonicity" : 0.5,
+				"modulationType" : "square"
+			},
+			"envelope" : {
+				"attackCurve" : "exponential",
+				"attack" : 0.05,
+				"decay" : 0.2,
+				"sustain" : 0.2,
+				"release" : 1.5,
+			},
+			"portamento" : 0.05
+			});
+}).toMaster(), volume: 0.6});
 
 for (let i = 0; i < CHANNELS; ++i) {
 	let channel = {
 		id: i,
-		synth: new Tone.Synth().toMaster(),
-		colourIt: i,
+		colourIt: 0,
 		timeShift: 0,
 		isOn: false,
-		get colour () {
+		get noteColour () {
+			return channelColours[this.id];
+		},
+		get instrumentColour() {
 			return channelColours[this.colourIt];
 		}
 	};
@@ -104,10 +142,14 @@ function transportCallback (time)
 	transportIt = getCurrentTransportIt();
 
 	result[transportIt] = 0;
+	let instrumentNotes = [];
+	for (let i = 0; i < instruments.length; ++i) instrumentNotes.push([]);
+
 	for (let i = 0; i < CHANNELS; ++i) {
 		if (channels[i].isOn) {
 			if (transportIt % times[i] == channels[i].timeShift) {
-				channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], Tone.Time("4n"), time, 0.7);
+				instrumentNotes[channels[i].colourIt].push(channelNotes[i]);
+				//channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], Tone.Time("4n"), time, 0.7);
 				result[transportIt]++;
 
 				let auxEnd = endLevelMap[transportIt * CHANNELS + i];
@@ -123,6 +165,15 @@ function transportCallback (time)
 					}
 				}
 			}
+		}
+	}
+
+	for (let i = 0; i < instruments.length; ++i) {
+		if (instrumentNotes[i].length > 0) {
+			instruments[i].synth.triggerAttackRelease(instrumentNotes[i], "4n", time, instruments[i].volume);
+		}
+		else {
+			instruments[i].synth.triggerRelease(instrumentNotes[i], time, instruments[i].volume);
 		}
 	}
 
@@ -401,7 +452,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 		draw: function(ctx) {
 			if(this.active) {
 				let aux = this.pressed? 1 : 0;
-				let colour = channels[this.id].colour;
+				let colour = channels[this.id].instrumentColour;
 				ctx.fillStyle = rgb(colour);
 				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 1);
 				if (!this.pressed) {
@@ -452,17 +503,17 @@ for (let i = 0; i < CHANNELS; ++i) {
 				p = p % times[this.id];
 
 				if (p == channels[this.id].timeShift && channels[this.id].isOn) {
-					ctx.fillStyle = rgba(channels[this.id].colour, 0.5);
+					ctx.fillStyle = rgba(channels[this.id].noteColour, 0.5);
 				}
 				else {
-					ctx.fillStyle = rgba(channels[this.id].colour, 0.35);
+					ctx.fillStyle = rgba(channels[this.id].noteColour, 0.35);
 				}
 
 				for (let j = p; j < TIME_STEPS; j += times[this.id]) {
 					ctx.fillRectScaled(this.buttonRect.x + j, this.buttonRect.y, 1, CHANNEL_HEIGHT);
 				}
 				
-				ctx.fillStyle = rgba(channels[this.id].colour, 0.5);
+				ctx.fillStyle = rgba(channels[this.id].noteColour, 0.5);
 				for (let j = p; j < TIME_STEPS; j += times[this.id]) {
 					ctx.fillRectScaled(this.buttonRect.x + j, CHANNEL_HEIGHT, 1, 1);//CHANNEL_HEIGHT - 1);
 				}
@@ -552,18 +603,18 @@ function muteChannelPressed(channelIt) {
 			channels[channelIt].timeShift = shift;
 		}*/
 	}
-
-	channelButtonSynth.triggerAttackRelease(channelNotes[channels[channelIt].colourIt], "8n", Tone.now(), 0.3);
+	
+	instruments[channels[channelIt].colourIt].synth.triggerAttackRelease(channelNotes[channelIt], "8n", Tone.now(), instruments[channels[channelIt].colourIt].volume);
 }
 
 function changeChannelPressed(channelIt) {
 	let it = channels[channelIt].colourIt + 1;
-	if (it >= CHANNELS) {
+	if (it >= instruments.length) {
 		it = 0;
 	}
 	channels[channelIt].colourIt = it;
 
-	channelButtonSynth.triggerAttackRelease(channelNotes[it], "8n", Tone.now(), 0.3);
+	instruments[it].synth.triggerAttackRelease(channelNotes[channelIt], "8n", Tone.now(), instruments[it].volume);
 }
 
 var levelExpectedChannels = 0;
@@ -610,7 +661,6 @@ function generateNewLevel()
 			availableMap.push({x: i, y: j, on: false, a: 1});
 		}
 	}
-	console.log("CHosen level: ", level);
 
 	// levelEndViz
 	for (let i = 0; i < needMap.length; ++i) {
@@ -885,13 +935,30 @@ function draw() {
 						ctx.fillRectScaled(3 + endLevelWindow.x, endLevelWindow.y, 1, 1);
 					}
 
-					if (transportIt == j && isMusicPlaying()) {						
-						ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
+					let isPlayingNoteNow = transportIt == j && isMusicPlaying();
+					if (isPlayingNoteNow) {						
+						ctx.fillStyle = rgb(channels[i].noteColour);
 					}
 					else {
-						ctx.fillStyle = rgb(darken(channelColours[channels[i].colourIt], 0.7));
+						ctx.fillStyle = rgb(darken(channels[i].noteColour, 0.7));
 					}
 					ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+
+					// texture
+					if (channels[i].colourIt == 0) {
+					
+					}
+					else if (channels[i].colourIt == 1) {
+						ctx.fillStyle = rgb(darken(channels[i].noteColour, 0.5));
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, 3);
+					}
+					else if (channels[i].colourIt == 2) {
+						ctx.fillStyle = rgb(darken(channels[i].noteColour, 0.5));
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, 1);
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 2, 1, 1);
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 4, 1, 1);
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 6, 1, 1);
+					}
 				}
 			}
 		}
