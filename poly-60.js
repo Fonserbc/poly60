@@ -9,7 +9,7 @@ var MAX_BPM = 360;
 var D_BPM = 240;
 var TURN_ONOFF_DURATION = 0.5;
 assetManager = new AssetManager();
-assetManager.downloadQueue = ["bg.png", "power_off.png", "power_on.png"];
+assetManager.downloadQueue = ["bg.png", "win-bg.png"];
 
 /*******************/
 /***** Colors ******/
@@ -33,7 +33,7 @@ function rgba(c, a = 0.5) {
 var c_bmpLEDWrong = {r: 255, g: 10, b: 0};
 var c_bmpLED = {r: 255, g: 140, b: 0};
 var c_level = {r: 81, g: 181, b:255};
-var c_level_dark = "#1A77C2";
+var c_level_dark = rgb(darken(c_level, 0.5));
 var c_beatHighlight = "rgba(0,0,0,0.35)";
 var c_minusPlus = "#abaea3";
 var c_minusPlusSide = "#75776f";
@@ -49,6 +49,7 @@ var c_result = rgb(c_bmpLED);
 var c_result_wrong = rgb(darken(c_bmpLED, 0.7));
 var c_challengeButtonFront = "#66EBFF";
 var c_challengeButtonBG = "#249FB3";
+var c_winLights = "#F4DF5F";
 var channelColours = [
 	{r: 255, g: 51, b: 18}, // red
 	{r: 189, g: 20, b: 217}, // purple
@@ -76,6 +77,7 @@ var times = [12,10,6,5,4,3,2];
 var channelNotes = ["D5","A4","D4","B3","E3","G2","C2"];
 var result = [];
 var level = [];
+var levelCorrectCount = 0;
 for (let i = 0; i < TIME_STEPS; ++i) {
 	result.push(0);
 	level.push(0);
@@ -107,6 +109,12 @@ function transportCallback (time)
 			if (transportIt % times[i] == channels[i].timeShift) {
 				channels[i].synth.triggerAttackRelease(channelNotes[channels[i].colourIt], Tone.Time("4n"), time, 0.7);
 				result[transportIt]++;
+
+				let auxEnd = endLevelMap[transportIt * CHANNELS + i];
+				if (auxEnd) {
+					let b = auxEnd.on;
+					auxEnd.on = !auxEnd.on;
+				}
 			}
 		}
 	}
@@ -352,10 +360,12 @@ for (let i = 0; i < CHANNELS; ++i) {
 			if(this.active) {
 				let isOn = channels[this.id].isOn;
 				let aux = this.pressed? 1 : 0;
-				ctx.fillStyle = isOn? c_muteButtonOn : c_muteButtonOff;
+				let lightOn = isOn && (!isMusicPlaying() || ((transportIt % times[this.id]) == channels[this.id].timeShift));
+
+				ctx.fillStyle = lightOn? c_muteButtonOn : c_muteButtonOff;
 				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 2);
 				if (!this.pressed) {
-					ctx.fillStyle = isOn? c_muteButtonOnSide : c_muteButtonOffSide;
+					ctx.fillStyle = lightOn? c_muteButtonOnSide : c_muteButtonOffSide;
 					ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 2, 1, 1);
 				}
 			}
@@ -444,7 +454,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 					ctx.fillRectScaled(this.buttonRect.x + j, this.buttonRect.y, 1, CHANNEL_HEIGHT);
 				}
 				
-				ctx.fillStyle = rgba(channels[this.id].colour, 0.35);
+				ctx.fillStyle = rgba(channels[this.id].colour, 0.5);
 				for (let j = p; j < TIME_STEPS; j += times[this.id]) {
 					ctx.fillRectScaled(this.buttonRect.x + j, CHANNEL_HEIGHT, 1, 1);//CHANNEL_HEIGHT - 1);
 				}
@@ -512,6 +522,9 @@ function turnMachineOff() {
 	setBPM(D_BPM);
 }
 
+var channelButtonSynth = new Tone.MembraneSynth({pitchDecay: 0.05, octaves: 10, }).toMaster();
+//var channelButtonSynth = new Tone.Synth({oscillator: {type: "square"}}).toMaster();
+
 function muteChannelPressed(channelIt) {
 	if (!channels[channelIt].isOn) {
 		channels[channelIt].isOn = true;
@@ -531,6 +544,8 @@ function muteChannelPressed(channelIt) {
 			channels[channelIt].timeShift = shift;
 		}*/
 	}
+
+	channelButtonSynth.triggerAttackRelease(channelNotes[channels[channelIt].colourIt], "8n", Tone.now(), 0.3);
 }
 
 function changeChannelPressed(channelIt) {
@@ -539,9 +554,12 @@ function changeChannelPressed(channelIt) {
 		it = 0;
 	}
 	channels[channelIt].colourIt = it;
+
+	channelButtonSynth.triggerAttackRelease(channelNotes[it], "8n", Tone.now(), 0.3);
 }
 
 var levelExpectedChannels = 0;
+var endLevelMap = {};
 function generateNewLevel()
 {	
 	levelExpectedChannels = Math.floor(Math.random() * (CHANNELS - 1)) + 2;
@@ -563,18 +581,44 @@ function generateNewLevel()
 		chosenShifts.push(Math.floor(Math.random() * times[chosenChannels[i]]));
 	}
 	console.log("Choosen shifts: ", chosenShifts);
-
+		
+	let availableMap = [];// level end viz
+	let needMap = [];
 
 	for (let i = 0; i < TIME_STEPS; ++i) {
 		level[i] = 0;
 
+		// add up level counts
 		for (let j = 0; j < chosenChannels.length; ++j) {
-			if ((i % times[chosenChannels[j]]) == chosenShifts[j]) level[i]++;
+			if ((i % times[chosenChannels[j]]) == chosenShifts[j]) {
+				level[i]++;
+
+				needMap.push(i * CHANNELS + chosenChannels[j]);
+			}
 		}
 
-		//if (level[i] == 1) level[i] = 0;
+		// levelEndViz
+		for (let j = level[i]; j < CHANNELS; ++j) {
+			availableMap.push({x: i, y: j, on: false});
+		}
 	}
 	console.log("CHosen level: ", level);
+
+	// levelEndViz
+	for (let i = 0; i < needMap.length; ++i) {
+		let r = Math.floor(Math.random() * availableMap.length);
+
+		endLevelMap[needMap[i]] = availableMap[r];
+
+		endLevelMap[needMap[i]].on = i %2 == 0;
+
+		if (r == availableMap.length - 1) {
+			availableMap.splice(r, 1);
+		}
+		else {
+			availableMap.splice(r, 2);
+		}
+	}
 }
 
 var canvas = document.getElementById("canvas");
@@ -757,42 +801,47 @@ function update(tick)
 function draw() {
 	ctx.drawImageScaled(bgImage, 0, 0, WIDTH, HEIGHT);
 				
-	if (transport.state != "stopped") {
-		ctx.fillStyle = c_beatHighlight;
-		ctx.fillRectScaled((3 + transportIt), 0, 1, 1 + CHANNEL_HEIGHT * (CHANNELS + 1));
-	}
-
+	let everythingCorrect = false;
 	if (isMachineOn()) {
-		var usedChannels = 0;
-		for (let i = 0; i < CHANNELS; ++i) {
-			if (channels[i].isOn) {
-				usedChannels++;
-				for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i]) {
-					if (transportIt == j && isMusicPlaying()) {
-						ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
-					}
-					else {
-						ctx.fillStyle = rgb(darken(channelColours[channels[i].colourIt], 0.7));
-					}
-					ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
-				}
-			}
+		// level
+		levelCorrectCount = 0;
+		for (let i = 0; i < TIME_STEPS; ++i) {
+			if (result[i] == level[i]) levelCorrectCount++;
 		}
 
+		everythingCorrect = levelCorrectCount == TIME_STEPS;
+
+		if (everythingCorrect) {
+			ctx.drawImageScaled(winbg, 3, 0, 60, 7);
+		}
+
+		let lastLevelFill = c_level_dark;
 		for (let i = 0; i < TIME_STEPS; ++i) {
 			let correct = result[i] == level[i]; // || (level[i] == 0 && result[i] <= 1) 
 			
-			ctx.fillStyle = !correct? rgb(c_level) : c_level_dark;
+			if (everythingCorrect) {
+				
+				if (i > 0) {
+					if (level[i] != level[i - 1]) {
+						lastLevelFill = rgb(darken(c_level, 0.5));// * Math.random()));
+					}
+				}
+				ctx.fillStyle = lastLevelFill;
+			}
+			else {
+				ctx.fillStyle = rgb(c_level);
+			}
+
 			let h = 7 - level[i];
 			if (h > 0) {
 				ctx.fillRectScaled(3 + i, level[i], 1, h);
 			}
 
-			if (result[i] > 0) {
+			if (!everythingCorrect && result[i] > 0) {
 				let top = Math.min(level[i], result[i]);
 
 				if (top > 0) {
-					ctx.fillStyle = correct? c_result : c_result_wrong;
+					ctx.fillStyle = (correct && !everythingCorrect)? c_result : c_result; // c_result_wrong
 
 					ctx.fillRectScaled(3 + i, 0, 1, top);
 				}
@@ -805,7 +854,39 @@ function draw() {
 				}
 			}
 		}
+	}
 
+	if (transport.state != "stopped") {
+		ctx.fillStyle = c_beatHighlight;
+		ctx.fillRectScaled((3 + transportIt), 0, 1, 1 + CHANNEL_HEIGHT * (CHANNELS + 1));
+	}
+
+	if (isMachineOn()) {
+		var usedChannels = 0;
+		// Channels
+		for (let i = 0; i < CHANNELS; ++i) {
+			if (channels[i].isOn) {
+				usedChannels++;
+				for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i])
+				{
+					if (everythingCorrect && endLevelMap[j * CHANNELS + i].on) { // win windows render
+						ctx.fillStyle = c_winLights;
+						let endLevelPos = endLevelMap[j * CHANNELS + i];
+						ctx.fillRectScaled(3 + endLevelPos.x, endLevelPos.y, 1, 1);
+					}
+
+					if (transportIt == j && isMusicPlaying()) {						
+						ctx.fillStyle = rgb(channelColours[channels[i].colourIt]);
+					}
+					else {
+						ctx.fillStyle = rgb(darken(channelColours[channels[i].colourIt], 0.7));
+					}
+					ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, CHANNEL_HEIGHT);
+				}
+			}
+		}
+
+		// Channel count bottom
 		var channelOverUnder = levelExpectedChannels - usedChannels;
 
 		for (let i = 0; i < CHANNELS; ++i) {
@@ -835,8 +916,10 @@ ctx.fillStyle = "#000";
 ctx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
 
 var bgImage = null;
+var winbg = null;
 assetManager.downloadAll(function() {
 	bgImage = assetManager.getAsset("bg.png");
+	winbg = assetManager.getAsset("win-bg.png");
 	ctx.drawImageScaled(bgImage, 0, 0, WIDTH, HEIGHT);
 
 	generateNewLevel();
