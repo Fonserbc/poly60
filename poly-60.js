@@ -33,7 +33,7 @@ function rgba(c, a = 0.5) {
 var c_bmpLEDWrong = {r: 255, g: 10, b: 0};
 var c_bmpLED = {r: 255, g: 140, b: 0};
 var c_level = {r: 81, g: 181, b:255};
-var c_level_dark = rgb(darken(c_level, 0.5));
+var c_level_dark = rgb(darken(c_level, 0.7));
 var c_beatHighlight = "rgba(0,0,0,0.35)";
 var c_minusPlus = "#abaea3";
 var c_minusPlusSide = "#75776f";
@@ -49,7 +49,7 @@ var c_result = rgb(c_bmpLED);
 var c_result_wrong = rgb(darken(c_bmpLED, 0.7));
 var c_challengeButtonFront = "#66EBFF";
 var c_challengeButtonBG = "#249FB3";
-var c_winLights = "#F4DF5F";
+var c_winLights = {r:244, g: 223, b: 95};
 var channelColours = [
 	{r: 255, g: 51, b: 18}, // red
 	{r: 189, g: 20, b: 217}, // purple
@@ -113,7 +113,14 @@ function transportCallback (time)
 				let auxEnd = endLevelMap[transportIt * CHANNELS + i];
 				if (auxEnd) {
 					let b = auxEnd.on;
-					auxEnd.on = !auxEnd.on;
+					auxEnd.on = true;
+					auxEnd.a = Math.random() < 0.5? 0.7 : 1;
+
+					let prevIt = (transportIt + 60 - times[i])%60;
+					let auxPrev = endLevelMap[prevIt * CHANNELS + i];
+					if (auxPrev && auxPrev.on) {
+						auxPrev.on = false;
+					}
 				}
 			}
 		}
@@ -599,7 +606,7 @@ function generateNewLevel()
 
 		// levelEndViz
 		for (let j = level[i]; j < CHANNELS; ++j) {
-			availableMap.push({x: i, y: j, on: false});
+			availableMap.push({x: i, y: j, on: false, a: 1});
 		}
 	}
 	console.log("CHosen level: ", level);
@@ -610,7 +617,8 @@ function generateNewLevel()
 
 		endLevelMap[needMap[i]] = availableMap[r];
 
-		endLevelMap[needMap[i]].on = i %2 == 0;
+		endLevelMap[needMap[i]].on = i % 2 == 0;
+		endLevelMap[needMap[i]].a = 0.5 * Math.random();
 
 		if (r == availableMap.length - 1) {
 			availableMap.splice(r, 1);
@@ -821,11 +829,11 @@ function draw() {
 			
 			if (everythingCorrect) {
 				
-				if (i > 0) {
-					if (level[i] != level[i - 1]) {
-						lastLevelFill = rgb(darken(c_level, 0.5));// * Math.random()));
-					}
-				}
+				//if (i > 0) {
+				//	if (level[i] != level[i - 1]) {
+				//		lastLevelFill = rgb(darken(c_level, 0.5));// * Math.random()));
+				//	}
+				//}
 				ctx.fillStyle = lastLevelFill;
 			}
 			else {
@@ -869,10 +877,11 @@ function draw() {
 				usedChannels++;
 				for (let j = channels[i].timeShift; j < TIME_STEPS; j += times[i])
 				{
-					if (everythingCorrect && endLevelMap[j * CHANNELS + i].on) { // win windows render
-						ctx.fillStyle = c_winLights;
-						let endLevelPos = endLevelMap[j * CHANNELS + i];
-						ctx.fillRectScaled(3 + endLevelPos.x, endLevelPos.y, 1, 1);
+					let endLevelWindow = endLevelMap[j * CHANNELS + i];
+
+					if (everythingCorrect && endLevelWindow.on) { // win windows render
+						ctx.fillStyle = rgba(c_winLights, endLevelWindow.a);
+						ctx.fillRectScaled(3 + endLevelWindow.x, endLevelWindow.y, 1, 1);
 					}
 
 					if (transportIt == j && isMusicPlaying()) {						
