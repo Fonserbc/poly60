@@ -4,9 +4,9 @@ var HEIGHT = 64;
 var TIME_STEPS = 60;
 var CHANNELS = 7;
 var CHANNEL_HEIGHT = 7;
-var MIN_BPM = 120;
-var MAX_BPM = 360;
-var D_BPM = 240;
+var MIN_BPM = 200;
+var MAX_BPM = 420;
+var D_BPM = 300;
 var TURN_ONOFF_DURATION = 0.5;
 assetManager = new AssetManager();
 assetManager.downloadQueue = ["bg.png", "win-bg.png"];
@@ -149,6 +149,7 @@ function setBPM(newBPM) {
 	}
 	//console.log("setting BPM at "+newBPM);
 	bmp = newBPM;
+	channelButtonSynth.triggerAttackRelease(bmp, "8n", Tone.now(), 0.1);
 }
 
 /*******************/
