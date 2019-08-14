@@ -9,7 +9,7 @@ var MAX_BPM = 420;
 var D_BPM = 300;
 var TURN_ONOFF_DURATION = 0.5;
 assetManager = new AssetManager();
-assetManager.downloadQueue = ["bg.png", "win-bg.png"];
+assetManager.downloadQueue = ["bg.png", "win-bg.png", "win-mask.png"];
 
 /*******************/
 /***** Colors ******/
@@ -137,9 +137,12 @@ for (let i = 0; i < CHANNELS; ++i) {
 }
 
 var lastTransportTime = 0;
+var totalTransportCallbacks = 0;
 function transportCallback (time)
 {
+	totalTransportCallbacks++;
 	transportIt = getCurrentTransportIt();
+	somethingIsWrong = false;
 
 	result[transportIt] = 0;
 	let instrumentNotes = [];
@@ -293,16 +296,25 @@ var stopButton = {
 				ctx.fillStyle = c_stopButtonFront;	
 				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + 1, 4, 4);
 
-				ctx.fillStyle = rgb(darken(c_bmpLED, 0.2));
-				ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + 2, 2, 2);
+				if (somethingIsWrong) {
+					let t = Math.floor(Time.time * 4) % 2;
+					if (t == 0) ctx.fillStyle = rgb(c_bmpLEDWrong);
+					else ctx.fillStyle = rgb(darken(c_bmpLEDWrong, 0.2));
 
-				let t = transportIt % 4;
-				let aux = {x: 0, y:0};
+					ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + 2, 2, 2);
+				}
+				else {
+					ctx.fillStyle = rgb(darken(c_bmpLED, 0.2));
+					ctx.fillRectScaled(this.buttonRect.x + 1, this.buttonRect.y + 2, 2, 2);
 
-				if (t == 1 || t == 2) aux.x = 1;
-				if (t == 2 || t == 3) aux.y = 1;
-				ctx.fillStyle = rgb(c_bmpLED);
-				ctx.fillRectScaled(this.buttonRect.x + 1 + aux.x, this.buttonRect.y + 2 + aux.y, 1, 1);
+					let t = transportIt % 4;
+					let aux = {x: 0, y:0};
+
+					if (t == 1 || t == 2) aux.x = 1;
+					if (t == 2 || t == 3) aux.y = 1;
+					ctx.fillStyle = rgb(c_bmpLED);
+					ctx.fillRectScaled(this.buttonRect.x + 1 + aux.x, this.buttonRect.y + 2 + aux.y, 1, 1);
+				}
 			}
 		}
 	}
@@ -452,7 +464,7 @@ for (let i = 0; i < CHANNELS; ++i) {
 		draw: function(ctx) {
 			if(this.active) {
 				let aux = this.pressed? 1 : 0;
-				let colour = channels[this.id].instrumentColour;
+				let colour = channels[this.id].noteColour;
 				ctx.fillStyle = rgb(colour);
 				ctx.fillRectScaled(this.buttonRect.x, this.buttonRect.y + aux, 1, 1);
 				if (!this.pressed) {
@@ -811,6 +823,7 @@ var Time = {
 	time : 0,
 	deltaTime: 0
 };
+var somethingIsWrong = false;
 function update(tick)
 {
 	var deltaTime = Math.min((tick - lastTick)/1000, maxTick);
@@ -819,7 +832,7 @@ function update(tick)
 	Time.deltaTime = deltaTime;
 	Time.time += deltaTime;
 
-	transportIt = getCurrentTransportIt();
+	//transportIt = getCurrentTransportIt();
 
 	lastTransportTime += deltaTime;
 
@@ -854,6 +867,11 @@ function update(tick)
 
 			turnOnSynth.triggerRelease(Tone.now() + Tone.Time("8n"));
 		}
+	}
+
+	if (isMachineOn() && lastTransportTime > (60/bmp)*1.5) {
+		console.log("Something is wrong with the audio");
+		somethingIsWrong = true;
 	}
 }
 
@@ -912,6 +930,26 @@ function draw() {
 					ctx.fillRectScaled(3 + i, top, 1, overflow);
 				}
 			}
+		}
+
+		if (everythingCorrect) {
+			for(let c = 0; c < channelColours.length; ++c) {
+
+				ctx.fillStyle = rgb(channelColours[c]);
+				let i = (c*2 + totalTransportCallbacks)%(channelColours.length * 2);
+				let max = 30 * 5; // Size of POLY-60 pixels
+				while (i < max) {
+					ctx.fillRectScaled(6 + 30 - i%30, 58 + Math.floor(i/30), 1, 1);
+					i++;
+					if (i < max) {
+						ctx.fillRectScaled(6  + 30 - i%30, 58 + Math.floor(i/30), 1, 1);
+					}
+					i++;
+					i += (channelColours.length - 1) * 2;
+				}
+			}
+
+			ctx.drawImageScaled(winMaskImage, 7, 58, 30, 5);
 		}
 	}
 
@@ -994,9 +1032,11 @@ ctx.clearRect(0,0,WIDTH*SCALE,HEIGHT*SCALE);
 
 var bgImage = null;
 var winbg = null;
+var winMaskImage = null;
 assetManager.downloadAll(function() {
 	bgImage = assetManager.getAsset("bg.png");
 	winbg = assetManager.getAsset("win-bg.png");
+	winMaskImage = assetManager.getAsset("win-mask.png");
 	ctx.drawImageScaled(bgImage, 0, 0, WIDTH, HEIGHT);
 
 	generateNewLevel();
