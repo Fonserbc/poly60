@@ -869,8 +869,9 @@ function update(tick)
 		}
 	}
 
-	if (isMachineOn() && lastTransportTime > (60/bmp)*1.5) {
+	if (!turningOn && isMusicPlaying() && lastTransportTime > (60/bmp)*2) {
 		console.log("Something is wrong with the audio");
+		console.log(transport);
 		somethingIsWrong = true;
 	}
 }
@@ -968,7 +969,7 @@ function draw() {
 				{
 					let endLevelWindow = endLevelMap[j * CHANNELS + i];
 
-					if (everythingCorrect && endLevelWindow.on) { // win windows render
+					if (everythingCorrect && endLevelWindow && endLevelWindow.on) { // win windows render
 						ctx.fillStyle = rgba(c_winLights, endLevelWindow.a);
 						ctx.fillRectScaled(3 + endLevelWindow.x, endLevelWindow.y, 1, 1);
 					}
