@@ -60,6 +60,15 @@ var channelColours = [
 	{r: 227, g: 215, b: 16}, // yellow
 ];
 
+var pentatonicMajor = [0, 2, 4, 7, 9];
+var bluesScale = [0, 3, 5, 6, 7, 10];
+var scales = [
+	["D5","A4","D4","B3","E3","G2","C2"],
+	["G6","E6","C5","B4","G3","E3","C2"],
+	["C7","D6","E5","F4","G3","A2","B1"]
+]
+var scalesIt = 0;
+
 /*******************/
 /*** Tonejs init ***/
 /*******************/
@@ -74,7 +83,7 @@ transport.scheduleRepeat(transportCallback, "4n");
 
 var channels = [];
 var times = [12,10,6,5,4,3,2];
-var channelNotes = ["D5","A4","D4","B3","E3","G2","C2"];
+var channelNotes = scales[scalesIt];
 var result = [];
 var level = [];
 var levelCorrectCount = 0;
@@ -94,7 +103,7 @@ instruments.push({synth: new Tone.PolySynth(7, function () {
 			},
 			"envelope" : {
 				"attackCurve" : "exponential",
-				"attack" : 0.05,
+				"attack" : 0.025,
 				"decay" : 0.2,
 				"sustain" : 0.2,
 				"release" : 1.5,
@@ -106,19 +115,48 @@ instruments.push({synth: new Tone.PolySynth(7, function () {
 	return new Tone.Synth({
 			"oscillator" : {
 				"type" : "fmtriangle",
-				"harmonicity" : 0.5,
-				"modulationType" : "square"
+				"harmonicity" : 1,
+				"modulationType" : "square",
+				"modulationIndex": 4
 			},
 			"envelope" : {
 				"attackCurve" : "exponential",
-				"attack" : 0.05,
+				"attack" : 0.025,
 				"decay" : 0.2,
 				"sustain" : 0.2,
-				"release" : 1.5,
+				"release" : 0.7,
 			},
 			"portamento" : 0.05
 			});
-}).toMaster(), volume: 0.6});
+}).toMaster(), volume: 0.2});
+instruments.push({synth: new Tone.PolySynth(7, function () {
+	return new Tone.Synth({
+			"oscillator" : {
+				"type" : "pwm",
+				"modulationFrequency" : 0.4
+			},
+			"envelope" : {
+				"attackCurve" : "sine",
+				"attack" : 0.03,
+				"decay" : 0.22,
+				"sustain" : 0.4,
+				"release" : 0.8,
+			}
+			});
+}).toMaster(), volume: 0.1});
+/*instruments.push({synth: new Tone.PolySynth(7, function () {
+	return new Tone.NoiseSynth({
+			"noise" : {
+				"type" : "white"
+			},
+			"envelope" : {
+				"attack" : 0.025,
+				"decay" : 0.1,
+				"sustain" : 0.1,
+				"release" : 0.5,
+			}
+			});
+}).toMaster(), volume: 1});*/
 
 for (let i = 0; i < CHANNELS; ++i) {
 	let channel = {
@@ -538,8 +576,6 @@ for (let i = 0; i < CHANNELS; ++i) {
 // turn on off music
 var turnOnScale = [];
 var turnOffScale = [];
-var pentatonicMajor = [0, 2, 4, 7, 9];
-var bluesScale = [0, 3, 5, 6, 7, 10];
 
 for (let i = 0; i < visibleButtonId; ++i) {
 	let tOn = Math.floor(i/pentatonicMajor.length) * 12 + pentatonicMajor[i % pentatonicMajor.length];
@@ -690,6 +726,9 @@ function generateNewLevel()
 			availableMap.splice(r, 2);
 		}
 	}
+
+	scalesIt = (scalesIt + 1)%scales.length;
+	channelNotes = scales[scalesIt];
 }
 
 var canvas = document.getElementById("canvas");
@@ -871,7 +910,6 @@ function update(tick)
 
 	if (!turningOn && isMusicPlaying() && lastTransportTime > (60/bmp)*2) {
 		console.log("Something is wrong with the audio");
-		console.log(transport);
 		somethingIsWrong = true;
 	}
 }
@@ -997,6 +1035,16 @@ function draw() {
 						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 2, 1, 1);
 						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 4, 1, 1);
 						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 6, 1, 1);
+					}
+					else if (channels[i].colourIt == 3) {
+						ctx.fillStyle = rgb(darken(channels[i].noteColour, 0.5));
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT, 1, 1);
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 3, 1, 1);
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 6, 1, 1);
+					}
+					else if (channels[i].colourIt == 4) {
+						ctx.fillStyle = rgb(darken(channels[i].noteColour, 0.5));
+						ctx.fillRectScaled(3 + j, 8 + i * CHANNEL_HEIGHT + 1, 1, 5);
 					}
 				}
 			}
