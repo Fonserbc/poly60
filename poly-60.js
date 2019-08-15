@@ -64,10 +64,13 @@ var pentatonicMajor = [0, 2, 4, 7, 9];
 var bluesScale = [0, 3, 5, 6, 7, 10];
 var scales = [
 	["D5","A4","D4","B3","E3","G2","C2"],
-	["G6","E6","C5","B4","G3","E3","C2"],
-	["C7","D6","E5","F4","G3","A2","B1"]
+	["G5","D5","C5","B4","G3","E3","C2"],
+	["C7","D6","E5","F4","G3","A2","B1"],
+	["Eb5","C5","G4","Db4","Ab3","F3","Bb2"],
+	["D5","A4","E4","C4","B3","F3","G2"],
+	["F#4","D4","Ab3","D3","Bb2","E2","C2"]
 ]
-var scalesIt = 0;
+var scalesIt = -1;
 
 /*******************/
 /*** Tonejs init ***/
@@ -83,7 +86,7 @@ transport.scheduleRepeat(transportCallback, "4n");
 
 var channels = [];
 var times = [12,10,6,5,4,3,2];
-var channelNotes = scales[scalesIt];
+var channelNotes = scales[0];
 var result = [];
 var level = [];
 var levelCorrectCount = 0;
@@ -729,6 +732,15 @@ function generateNewLevel()
 
 	scalesIt = (scalesIt + 1)%scales.length;
 	channelNotes = scales[scalesIt];
+
+	if (isMachineOn()) {
+		console.log("doing time thing", channelNotes.length);
+		// make some noise
+		for (let i = 0; i < channelNotes.length; ++i) {
+			turnOnSynth.triggerAttack(channelNotes[channelNotes.length - 1 - i], Tone.now() + 0.035 * i, 0.7);
+		}
+		turnOnSynth.triggerRelease(Tone.now() + 0.035 * channelNotes.length);
+	}
 }
 
 var canvas = document.getElementById("canvas");
@@ -911,6 +923,10 @@ function update(tick)
 	if (!turningOn && isMusicPlaying() && lastTransportTime > (60/bmp)*2) {
 		console.log("Something is wrong with the audio");
 		somethingIsWrong = true;
+
+		transport.stop();
+		transport.start();
+		somethingIsWrong = false;
 	}
 }
 
