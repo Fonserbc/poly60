@@ -1,3 +1,12 @@
+/*
+	Poly-60 is a game by @fonserbc
+	you can play it on fonserbc.itch.io/poly-60
+
+	Originally made for LowRezJam19
+
+	Made using Tonejs (tonejs.github.io)
+*/
+
 var SCALE = 10; // 9
 var WIDTH = 64;
 var HEIGHT = 64;
