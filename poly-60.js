@@ -7,7 +7,7 @@
 	Made using Tonejs (tonejs.github.io)
 */
 
-var SCALE = 10; // 9
+var SCALE = 9; // 9
 var WIDTH = 64;
 var HEIGHT = 64;
 var TIME_STEPS = 60;
@@ -17,6 +17,7 @@ var MIN_BPM = 200;
 var MAX_BPM = 420;
 var D_BPM = 300;
 var TURN_ONOFF_DURATION = 0.5;
+var CALCULATE_COMBINATIONS = false;
 assetManager = new AssetManager();
 assetManager.downloadQueue = ["bg.png", "win-bg.png", "win-mask.png"];
 
@@ -1117,3 +1118,51 @@ assetManager.downloadAll(function() {
 				
 	window.requestAnimFrame(loop);
 });
+
+// Combinations counting
+if (CALCULATE_COMBINATIONS) {
+	var combinations = 0;
+
+	var currentChoice = [];
+	for (let i = 0; i < CHANNELS; ++i) {
+		currentChoice.push(false);
+	}
+
+	for (let i = 1; i <= CHANNELS; ++i) {
+		let c = calculateCombinations(0, i, -1);
+		console.log(c + " combinations of "+i);
+		combinations += c;
+	}
+
+	console.log("Total there are "+combinations+" combinations");
+
+	function calculateCombinations(currentChoiceCount, wantedLength, lastChoice) {
+		if (currentChoiceCount == wantedLength) {
+			let c = 1;
+			for (let i = 0; i < currentChoice.length; ++i) {
+				if (currentChoice[i]) {
+					c *= times[i] * instruments.length;
+				}
+			}
+
+			c *= scales.length;
+
+			if (wantedLength == 1) {
+				console.log(times[lastChoice], c);
+			}
+
+			return c;
+		}
+		else {
+			let c = 0;
+			for (let i = lastChoice + 1; i < CHANNELS; ++i) {
+				if (!currentChoice[i]) {
+					currentChoice[i] = true;
+					c += calculateCombinations(currentChoiceCount + 1, wantedLength, i);
+					currentChoice[i] = false;
+				}
+			}
+			return c;
+		}
+	}
+}
