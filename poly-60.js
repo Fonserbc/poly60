@@ -227,7 +227,7 @@ function transportCallback (time)
 			instruments[i].synth.triggerAttackRelease(instrumentNotes[i], "4n", time, instruments[i].volume);
 		}
 		else {
-			instruments[i].synth.triggerRelease(instrumentNotes[i], time, instruments[i].volume);
+			instruments[i].synth.triggerRelease(instrumentNotes[i], time);
 		}
 	}
 
